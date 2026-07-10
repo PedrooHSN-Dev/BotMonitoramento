@@ -36,7 +36,7 @@ cache_notificacoes = {
 FILTRO_SEMENTES = [
     "dragon fruit", "venus flytrap", "- mushroom", "rocket pop", 
     "sunflower", "fire fern", "pomegranate", "poison apple", 
-    "venon splitter", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
+    "venon splitter", "venom spitter", "moon bloom", "hypno bloom", "dragons breath", "strawberry"
 ]
 
 FILTRO_MULTIPLICADORES = [
