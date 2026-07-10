@@ -36,7 +36,7 @@ async def on_message(message):
     # Dicionário de canais e palavras-chave (tudo minúsculo)
     ALERTAS_POR_CANAL = {
         "seed": ["dragon fruit", "venus flytrap", "- mushroom", "rocket pop", "sunflower", "fire fern", "pomegranate", "poison apple", "venon splitter", "moon bloom", "hypno bloom", "dragons breath"],
-        "fruitprice": ["bamboo", "dragon fruit", "venus flytrap", "mushroom"],
+        "fruitprice": ["everyone"],
         "weather": ["goldmoon", "snowfall", "bloodmoon", "rainbow", "rainbow moon", "lightning", "aurora", "starfall", "mega moon", "sunburst"]
     }
 
