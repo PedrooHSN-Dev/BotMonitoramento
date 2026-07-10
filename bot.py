@@ -40,7 +40,7 @@ FILTRO_SEMENTES = [
 ]
 
 FILTRO_MULTIPLICADORES = [
-    "bamboo", "dragon fruit", "venus fly trap", "mushroom"
+    "bamboo", "dragon fruit", "venus fly trap", "mushroom", "rocket pop"
 ]
 
 FILTRO_EVENTOS = [
