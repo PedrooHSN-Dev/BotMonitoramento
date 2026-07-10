@@ -1,14 +1,13 @@
 import discord
 from discord.ext import tasks
 import requests
-import re
 import os
 import asyncio
 from aiohttp import web
 
 # --- 1. Servidor Web (Impede o Render de desligar o bot) ---
 async def handle_ping(request):
-    return web.Response(text="Scraper GAG2 Inteligente rodando 24/7!")
+    return web.Response(text="API Monitor GAG2 rodando 24/7!")
 
 async def run_web_server():
     app = web.Application()
@@ -19,7 +18,7 @@ async def run_web_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
-# --- 2. Lógica do Bot e Web Scraper ---
+# --- 2. Lógica do Bot e API Monitor ---
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
@@ -34,7 +33,7 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus fly trap", "mushroom", "Strawberry", 
+    "dragon fruit", "venus fly trap", "mushroom", "strawberry", 
     "rocket pop", "sunflower", "fire fern", "pomegranate", 
     "poison apple", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
@@ -51,98 +50,109 @@ FILTRO_EVENTOS = [
 
 @client.event
 async def on_ready():
-    print(f'✅ Bot conectado como {client.user}! Iniciando varredura por texto...')
-    if not monitorar_site.is_running():
-        monitorar_site.start()
+    print(f'✅ Bot conectado como {client.user}! Iniciando monitoramento via API JSON...')
+    if not monitorar_api.is_running():
+        monitorar_api.start()
 
-@tasks.loop(minutes=1)
-async def monitorar_site():
+@tasks.loop(minutes=3)
+async def monitorar_api():
     print("-" * 40)
-    print("🔄 Iniciando varredura de texto cru...")
+    print("🔄 Puxando dados das APIs do gag2.gg...")
+    # Usamos Accept application/json para avisar ao servidor que queremos o dado puro
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
     }
     alertas = []
 
     try:
-        # --- 1. MULTIPLICADORES DE VENDA (SELL) ---
-        req_sell = requests.get("https://www.gag2.gg/stock/sell", headers=headers, timeout=10)
-        texto_sell_lower = req_sell.text.lower()
+        # --- 1. MULTIPLICADORES (SELL) ---
+        req_sell = requests.get("https://api.gag2.gg/api/live/sell", headers=headers, timeout=10)
         
-        mults_agora = set()
-        for fruta in FILTRO_MULTIPLICADORES:
-            # Procura a fruta e captura o primeiro multiplicador que termine com '×' ou 'x' logo após ela
-            match = re.search(re.escape(fruta) + r'.*?(\d+(?:\.\d+)?)\s*[×x]', texto_sell_lower, re.DOTALL)
-            if match:
-                mult_val = float(match.group(1))
-                # Filtra apenas os focos de 2x e 4x
-                if mult_val >= 2.0:
-                    mults_agora.add(f"{fruta.title()} ({int(mult_val)}x)")
+        if req_sell.status_code == 200:
+            dados_sell = req_sell.json()
+            mults_agora = set()
+            
+            # Navega pelo JSON para encontrar as frutas e seus multiplicadores
+            for entrada in dados_sell.get("sell", {}).get("entries", []):
+                nome_fruta = entrada.get("name", "")
+                nome_limpo = nome_fruta.lower().replace("'", "").replace("’", "")
+                multiplicador = entrada.get("multiplier", 1.0)
+                
+                # Verifica se a fruta está no filtro e se o multiplicador é bom (>= 2.0)
+                if nome_limpo in FILTRO_MULTIPLICADORES and multiplicador >= 2.0:
+                    mults_agora.add(f"{nome_fruta} ({int(multiplicador)}x)")
 
-        novos_mults = mults_agora - cache_notificacoes["multiplicadores"]
-        if novos_mults:
-            lista_formatada = "\n".join([f"📈 • **{m}**" for m in novos_mults])
-            alertas.append(f"**Multiplicadores em Alta:**\n{lista_formatada}")
-        cache_notificacoes["multiplicadores"] = mults_agora
+            novos_mults = mults_agora - cache_notificacoes["multiplicadores"]
+            if novos_mults:
+                lista_formatada = "\n".join([f"📈 • **{m}**" for m in novos_mults])
+                alertas.append(f"**Multiplicadores em Alta:**\n{lista_formatada}")
+            cache_notificacoes["multiplicadores"] = mults_agora
+        else:
+            print(f"⚠️ Erro na API Sell. Status: {req_sell.status_code}")
 
         # --- 2. SEMENTES NO ESTOQUE (STOCK) ---
-        req_stock = requests.get("https://www.gag2.gg/stock", headers=headers, timeout=10)
-        texto_stock_lower = req_stock.text.lower()
+        req_stock = requests.get("https://api.gag2.gg/api/live/stock", headers=headers, timeout=10)
         
-        sementes_agora = set()
-        idx_seed = texto_stock_lower.find("seed shop")
-        idx_gear = texto_stock_lower.find("gear shop")
-        
-        # Segmenta o texto para ler apenas a área correspondente às sementes
-        if idx_seed != -1 and idx_gear != -1:
-            trecho_seeds = texto_stock_lower[idx_seed:idx_gear]
-            for alvo in FILTRO_SEMENTES:
-                if alvo in trecho_seeds:
-                    sementes_agora.add(alvo.title())
+        if req_stock.status_code == 200:
+            dados_stock = req_stock.json()
+            sementes_agora = set()
+            
+            # Procura especificamente pela categoria "seed" no JSON
+            for categoria in dados_stock.get("stock", []):
+                if categoria.get("category") == "seed":
+                    for item in categoria.get("items", []):
+                        nome_semente = item.get("name", "")
+                        nome_limpo = nome_semente.lower().replace("'", "").replace("’", "")
+                        
+                        if nome_limpo in FILTRO_SEMENTES:
+                            sementes_agora.add(nome_semente)
+                    break # Já varreu as sementes, pode parar o loop de categorias
+                    
+            novas_sementes = sementes_agora - cache_notificacoes["sementes"]
+            if novas_sementes:
+                alertas.append(f"🌱 **Estoque:** {', '.join(novas_sementes)}")
+            cache_notificacoes["sementes"] = sementes_agora
         else:
-            # Fallback de segurança caso a estrutura mude drasticamente
-            for alvo in FILTRO_SEMENTES:
-                if alvo in texto_stock_lower:
-                    sementes_agora.add(alvo.title())
-
-        novas_sementes = sementes_agora - cache_notificacoes["sementes"]
-        if novas_sementes:
-            alertas.append(f"🌱 **Estoque:** {', '.join(novas_sementes)}")
-        cache_notificacoes["sementes"] = sementes_agora
+            print(f"⚠️ Erro na API Stock. Status: {req_stock.status_code}")
 
         # --- 3. CLIMA (WEATHER) ---
-        req_weather = requests.get("https://www.gag2.gg/stock/weather", headers=headers, timeout=10)
-        texto_weather_lower = req_weather.text.lower()
+        req_weather = requests.get("https://api.gag2.gg/api/live/weather", headers=headers, timeout=10)
         
-        if "no active weather" not in texto_weather_lower:
-            idx_active = texto_weather_lower.find("active now")
-            if idx_active != -1:
-                # Examina os próximos 400 caracteres após o indicador de evento ativo
-                trecho_clima_ativo = texto_weather_lower[idx_active:idx_active+400]
+        if req_weather.status_code == 200:
+            dados_weather = req_weather.json()
+            # O objeto 'current' vai existir se tiver evento, ou será None se o clima estiver limpo
+            clima_atual = dados_weather.get("weather", {}).get("current")
+            
+            if clima_atual: 
+                nome_evento = clima_atual.get("name", "")
+                nome_limpo = nome_evento.lower().replace("'", "").replace("’", "")
                 
-                for evento in FILTRO_EVENTOS:
-                    if evento in trecho_clima_ativo:
-                        estado_clima = f"evento_{evento}"
-                        if cache_notificacoes["weather"] != estado_clima:
-                            alertas.append(f"☁️ **Evento Ativo:** {evento.title()}!")
-                            cache_notificacoes["weather"] = estado_clima
-                        break
+                # Checa se o evento que está rodando é um dos que você quer monitorar
+                if any(alvo in nome_limpo for alvo in FILTRO_EVENTOS):
+                    estado_clima = f"evento_{nome_limpo}"
+                    
+                    if cache_notificacoes["weather"] != estado_clima:
+                        alertas.append(f"☁️ **Evento Ativo:** {nome_evento}!")
+                        cache_notificacoes["weather"] = estado_clima
+            else:
+                cache_notificacoes["weather"] = "limpo"
         else:
-            cache_notificacoes["weather"] = "limpo"
+            print(f"⚠️ Erro na API Weather. Status: {req_weather.status_code}")
 
-        # --- ENVIO DA MENSAGEM DIRETA (DM) ---
+        # --- ENVIO DA DM ---
         if alertas:
             user_id = int(os.environ.get('DISCORD_USER_ID'))
             user = await client.fetch_user(user_id)
             
             mensagem_final = "\n\n".join(alertas)
-            await user.send(f"🚨 **Atualização GAG2 Live** 🚨\n\n{mensagem_final}")
-            print("✅ DM enviada com sucesso utilizando varredura crua!")
+            await user.send(f"🚨 **Atualização GAG2 Live (Direto da API)** 🚨\n\n{mensagem_final}")
+            print("✅ DM enviada com sucesso!")
         else:
-            print("⚪ Nenhum item dos filtros ativo neste ciclo.")
-            
+            print("⚪ Nenhum item dos filtros ativado neste ciclo.")
+
     except Exception as e:
-        print(f"❌ Erro na varredura: {e}")
+        print(f"❌ Erro grave de conexão/processamento: {e}")
 
 # --- 3. Inicialização ---
 async def main():
