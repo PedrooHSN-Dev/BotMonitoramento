@@ -8,7 +8,7 @@ from aiohttp import web
 
 # --- 1. Servidor Web (Impede o Render de desligar o bot) ---
 async def handle_ping(request):
-    return web.Response(text="Scraper com filtros rodando 24/7!")
+    return web.Response(text="Scraper GAG2 com filtros rodando 24/7!")
 
 async def run_web_server():
     app = web.Application()
@@ -36,7 +36,7 @@ cache_notificacoes = {
 FILTRO_SEMENTES = [
     "dragon fruit", "venus flytrap", "- mushroom", "rocket pop", 
     "sunflower", "fire fern", "pomegranate", "poison apple", 
-    "venon splitter", "venom spitter", "moon bloom", "hypno bloom", "dragons breath", "strawberry"
+    "venon splitter", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
 
 FILTRO_MULTIPLICADORES = [
@@ -51,11 +51,11 @@ FILTRO_EVENTOS = [
 
 @client.event
 async def on_ready():
-    print(f'✅ Bot conectado como {client.user}! Iniciando monitoramento com filtros...')
+    print(f'✅ Bot conectado como {client.user}! Iniciando monitoramento...')
     if not monitorar_site.is_running():
         monitorar_site.start()
 
-@tasks.loop(minutes=3)
+@tasks.loop(minutes=1)
 async def monitorar_site():
     print("🔄 Puxando dados do gag2.gg...")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -68,15 +68,12 @@ async def monitorar_site():
         mults_agora = set()
         
         for elemento_nome in soup_sell.find_all(attrs={"title": True}):
-            # Limpa o nome removendo apóstrofos para a busca ser infalível
             nome_fruta = elemento_nome['title'].lower().replace("'", "").replace("’", "")
             
-            # Verifica se a fruta lida está na sua lista de interesse para 2x/4x
             if any(alvo in nome_fruta for alvo in FILTRO_MULTIPLICADORES):
                 container = elemento_nome.parent
                 if container:
                     texto_container = container.get_text()
-                    # Salva com o nome original do elemento para ficar bonito no Discord
                     nome_original = elemento_nome['title']
                     if "2×" in texto_container:
                         mults_agora.add(f"{nome_original} (2x)")
@@ -94,12 +91,20 @@ async def monitorar_site():
         soup_stock = BeautifulSoup(req_stock.text, 'html.parser')
         sementes_agora = set()
         
-        for elemento_nome in soup_stock.find_all(attrs={"title": True}):
-            nome_item = elemento_nome['title'].lower().replace("'", "").replace("’", "")
-            nome_original = elemento_nome['title']
+        # Procura por todos os itens na lista usando a classe que envolve cada linha de item
+        itens_estoque = soup_stock.find_all('div', class_='flex items-center gap-3 py-1.5 px-2')
+        
+        for item in itens_estoque:
+            # Pega todo o texto da linha do item
+            texto_item = item.get_text(separator=' ', strip=True).lower()
             
-            if any(alvo in nome_item for alvo in FILTRO_SEMENTES):
-                sementes_agora.add(nome_original)
+            # Verifica cada semente da sua lista
+            for semente_alvo in FILTRO_SEMENTES:
+                # O nome da semente precisa estar no texto da linha
+                if semente_alvo in texto_item:
+                    # Formata o nome para ficar bonito na notificação (ex: "strawberry" -> "Strawberry")
+                    nome_formatado = semente_alvo.title()
+                    sementes_agora.add(nome_formatado)
                 
         novas_sementes = sementes_agora - cache_notificacoes["sementes"]
         if novas_sementes:
@@ -109,19 +114,17 @@ async def monitorar_site():
         # --- 3. CLIMA (WEATHER) ---
         req_weather = requests.get("https://www.gag2.gg/stock/weather", headers=headers)
         soup_weather = BeautifulSoup(req_weather.text, 'html.parser')
-        texto_weather = soup_weather.get_text(separator=' ', strip=True).lower()
         
-        # Se a frase padrão sumiu, o clima mudou
-        if "no active weather" not in texto_weather:
-            # Procura qual dos seus eventos alvo está no texto da página agora
-            eventos_encontrados = [evt for evt in FILTRO_EVENTOS if evt in texto_weather]
+        tag_evento_ativo = soup_weather.find("h3", class_="text-lg font-bold truncate")
+        
+        if tag_evento_ativo:
+            nome_evento = tag_evento_ativo.get_text(strip=True).lower()
             
-            if eventos_encontrados:
-                # Usa o evento encontrado como marcador de estado no cache
-                estado_clima = f"evento_{eventos_encontrados[0]}"
+            if any(alvo in nome_evento for alvo in FILTRO_EVENTOS):
+                estado_clima = f"evento_{nome_evento}"
+                
                 if cache_notificacoes["weather"] != estado_clima:
-                    nomes_formatados = [evt.title() for evt in eventos_encontrados]
-                    alertas.append(f"☁️ **Evento Climático Ativo:** Detecção de {', '.join(nomes_formatados)}!")
+                    alertas.append(f"☁️ **Evento Climático Ativo:** {nome_evento.title()}!")
                     cache_notificacoes["weather"] = estado_clima
         else:
             cache_notificacoes["weather"] = "limpo"
@@ -133,7 +136,7 @@ async def monitorar_site():
             
             mensagem_final = "\n\n".join(alertas)
             await user.send(f"🚨 **Atualização GAG2 Live** 🚨\n\n{mensagem_final}")
-            print("✅ DM enviada com base nos filtros!")
+            print("✅ DM enviada com sucesso!")
         else:
             print("Nenhum item dos filtros ativado neste ciclo.")
             
