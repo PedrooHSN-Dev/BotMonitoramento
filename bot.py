@@ -34,7 +34,7 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus flytrap", "- mushroom", "rocket pop", 
+    "dragon fruit", "venus flytrap", "mushroom", "rocket pop", 
     "sunflower", "fire fern", "pomegranate", "poison apple", 
     "venon splitter", "venom spitter", "moon bloom", "hypno bloom", "dragons breath", "strawberry"
 ]
@@ -91,20 +91,20 @@ async def monitorar_site():
         soup_stock = BeautifulSoup(req_stock.text, 'html.parser')
         sementes_agora = set()
         
-        # Procura por todos os itens na lista usando a classe que envolve cada linha de item
+        # O site separa as "lojas" (Seed Shop, Gear Shop, Crates) em cards.
+        # Vamos pegar todos os itens listados nessas lojas. Eles usam essa classe:
         itens_estoque = soup_stock.find_all('div', class_='flex items-center gap-3 py-1.5 px-2')
         
         for item in itens_estoque:
-            # Pega todo o texto da linha do item
-            texto_item = item.get_text(separator=' ', strip=True).lower()
+            # Pega o texto da linha. Ex: "Rocket Pop LEGENDARY ×4" -> "rocket pop legendary ×4"
+            texto_item = item.get_text(separator=' ', strip=True).lower().replace("'", "").replace("’", "")
             
-            # Verifica cada semente da sua lista
-            for semente_alvo in FILTRO_SEMENTES:
-                # O nome da semente precisa estar no texto da linha
-                if semente_alvo in texto_item:
-                    # Formata o nome para ficar bonito na notificação (ex: "strawberry" -> "Strawberry")
-                    nome_formatado = semente_alvo.title()
-                    sementes_agora.add(nome_formatado)
+            for alvo in FILTRO_SEMENTES:
+                # O alvo (ex: "rocket pop") deve estar contido no texto da linha
+                # Mas precisamos garantir que é uma palavra exata, não parte de outra.
+                # Como a lista de filtros já está limpa, basta um simples `in`.
+                if alvo in texto_item:
+                    sementes_agora.add(alvo.title())
                 
         novas_sementes = sementes_agora - cache_notificacoes["sementes"]
         if novas_sementes:
