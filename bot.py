@@ -25,8 +25,8 @@ client = discord.Client(intents=intents)
 
 # Cache baseado em marcadores de tempo (Timestamps) de atualização do próprio servidor
 cache_notificacoes = {
-    "last_seed_restock": "",     # Guarda o ID do último reset de sementes
-    "last_sell_boundary": 0,     # Guarda o ID do último ciclo de multiplicadores
+    "last_seed_restock": "",     
+    "last_sell_boundary": 0,     
     "weather": "limpo"
 }
 
@@ -55,7 +55,7 @@ async def on_ready():
     if not monitorar_api.is_running():
         monitorar_api.start()
 
-@tasks.loop(minutes=1) # Reduzido para 1 minuto para capturar a virada exata dos horários redondos
+@tasks.loop(minutes=1) 
 async def monitorar_api():
     print("-" * 40)
     print("🔄 Puxando dados das APIs...")
@@ -72,7 +72,6 @@ async def monitorar_api():
             dados_sell = req_sell.json().get("sell", {})
             boundary = dados_sell.get("boundary", 0)
             
-            # SÓ VERIFICA SE O SINAL DE CICLO MUDOU (Nova rotação de 10 minutos)
             if boundary != cache_notificacoes["last_sell_boundary"]:
                 mults_agora = []
                 for entrada in dados_sell.get("entries", []):
@@ -87,7 +86,6 @@ async def monitorar_api():
                     lista_formatada = "\n".join([f"📈 • **{m}**" for m in mults_agora])
                     alertas.append(f"**Multiplicadores de Venda Atualizados:**\n{lista_formatada}")
                 
-                # Salva o ID do novo ciclo para não repetir o alerta nos próximos minutos
                 cache_notificacoes["last_sell_boundary"] = boundary
 
         # --- 2. SEMENTES NO ESTOQUE (STOCK) ---
@@ -99,7 +97,6 @@ async def monitorar_api():
                 if categoria.get("category") == "seed":
                     restocked_at = categoria.get("restockedAt", "")
                     
-                    # SÓ VERIFICA SE O TIMESTAMP DE RESTOCK MUDOU (Nova rotação de 5 minutos)
                     if restocked_at != cache_notificacoes["last_seed_restock"]:
                         sementes_encontradas = []
                         for item in categoria.get("items", []):
@@ -110,9 +107,9 @@ async def monitorar_api():
                                 sementes_encontradas.append(nome_semente)
                         
                         if sementes_encontradas:
-                            alertas.append(f"🌱 **Estoque da Seed Shop Atualizado:**\n" + "\n".join([f"• {s}" for semente in sementes_encontradas]))
+                            # CORREÇÃO AQUI: Trocado {s} por {semente}
+                            alertas.append(f"🌱 **Estoque da Seed Shop Atualizado:**\n" + "\n".join([f"• {semente}" for semente in sementes_encontradas]))
                         
-                        # Salva o ID do restock para silenciar os próximos loops idênticos
                         cache_notificacoes["last_seed_restock"] = restocked_at
                     break 
 
