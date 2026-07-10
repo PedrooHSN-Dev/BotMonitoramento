@@ -31,23 +31,60 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    # Ignora mensagens do próprio bot que estamos criando
     if message.author == client.user:
         return
 
-    PALAVRA_CHAVE = "urgente" # Coloque sua palavra aqui (tudo em minúsculo)
+    # 1. Configuração do que procurar em cada canal (nomes exatos dos canais do print)
+    # IMPORTANTE: Escreva todas as palavras em minúsculo aqui!
+    ALERTAS_POR_CANAL = {
+        "seed": ["bamboo", "tomato", "cactus"],
+        "fruitprice": ["poison apple", "cactus", "venus flytrap"],
+        "weather": ["rain"]
+    }
+
+    nome_canal = message.channel.name
+
+    # Se a mensagem chegar em um canal que não está na lista acima, o bot ignora
+    if nome_canal not in ALERTAS_POR_CANAL:
+        return
+
+    # 2. Extraindo o texto de dentro dos Embeds (as caixas do G4G2_BOT)
+    texto_completo = message.content.lower()
     
-    if PALAVRA_CHAVE in message.content.lower():
-        print("🔔 Palavra-chave detectada!")
+    for embed in message.embeds:
+        if embed.title:
+            texto_completo += f" {embed.title.lower()}"
+        if embed.description:
+            texto_completo += f" {embed.description.lower()}"
+        for field in embed.fields:
+            texto_completo += f" {field.name.lower()} {field.value.lower()}"
+
+    # Se a mensagem for vazia mesmo após procurar nos embeds, ignora
+    if not texto_completo.strip():
+        return
+
+    # 3. Puxa a lista de palavras-chave correspondente ao canal que recebeu a mensagem
+    palavras_chave_do_canal = ALERTAS_POR_CANAL[nome_canal]
+
+    # Verifica se alguma das palavras foi encontrada dentro do texto extraído
+    palavras_encontradas = [p for p in palavras_chave_do_canal if p in texto_completo]
+
+    if palavras_encontradas:
+        print(f"🔔 Encontrado {palavras_encontradas} no canal #{nome_canal}!")
         
-        # Formata o texto para o WhatsApp
-        texto_notificacao = f"🔔 *Alerta do Discord*\nCanal: {message.channel.name}\n\n{message.content}"
+        # Como o texto do embed inteiro é longo e bagunçado, vamos pegar só o Título Principal para o WhatsApp
+        titulo_alerta = message.embeds[0].title if message.embeds and message.embeds[0].title else "Alerta do Jogo"
+        
+        # Formata uma mensagem limpa e direta para o seu WhatsApp
+        texto_notificacao = f"🔔 *{titulo_alerta}*\nCanal: #{nome_canal}\nGatilho: {', '.join(palavras_encontradas)}"
         texto_codificado = urllib.parse.quote(texto_notificacao)
         
         # Puxa as variáveis de ambiente
         phone = os.environ.get('WHATSAPP_PHONE')
         apikey = os.environ.get('CALLMEBOT_KEY')
         
-        # Dispara via CallMeBot
+        # Dispara para o WhatsApp via CallMeBot
         url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={texto_codificado}&apikey={apikey}"
         
         try:
