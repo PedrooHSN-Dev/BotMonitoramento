@@ -1,6 +1,4 @@
 import discord
-import requests
-import urllib.parse
 import os
 import asyncio
 from aiohttp import web
@@ -14,7 +12,7 @@ async def run_web_server():
     app.add_routes([web.get('/', handle_ping)])
     runner = web.AppRunner(app)
     await runner.setup()
-
+    
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
@@ -25,27 +23,29 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-ALERTAS_POR_CANAL = {
-    "seed": ["bamboo", "tomato", "cactus"],
-    "fruitprice": ["poison apple", "cactus", "venus flytrap"],
-    "weather": ["rain"]
-}
-
 @client.event
 async def on_ready():
     print(f'✅ Bot conectado como {client.user}')
 
-    # Checagem das variáveis de ambiente na inicialização
-    phone_ok = bool(os.environ.get('WHATSAPP_PHONE'))
-    apikey_ok = bool(os.environ.get('CALLMEBOT_KEY'))
-    print(f"📱 WHATSAPP_PHONE configurado: {phone_ok}")
-    print(f"🔑 CALLMEBOT_KEY configurada: {apikey_ok}")
-    if not phone_ok or not apikey_ok:
-        print("⚠️ ATENÇÃO: uma ou mais variáveis de ambiente do WhatsApp estão faltando no Render!")
+@client.event
+async def on_message(message):
+    # Ignora mensagens do próprio bot
+    if message.author == client.user:
+        return
 
+    # Dicionário de canais e palavras-chave (tudo minúsculo)
+    ALERTAS_POR_CANAL = {
+        "seed": ["bamboo", "tomato", "cactus", "corn", "pineapple", "tulip", "apple"],
+        "fruitprice": ["poison apple", "cactus", "venus flytrap", "acorn", "green bean", "baby cactus", "dragons breath"],
+        "weather": ["rain"]
+    }
 
-def extrair_texto(message: discord.Message) -> str:
-    """Junta o conteúdo da mensagem + tudo que estiver dentro dos embeds."""
+    nome_canal = message.channel.name
+
+    if nome_canal not in ALERTAS_POR_CANAL:
+        return
+
+    # Extrai o texto dos embeds
     texto_completo = message.content.lower()
     for embed in message.embeds:
         if embed.title:
@@ -54,48 +54,7 @@ def extrair_texto(message: discord.Message) -> str:
             texto_completo += f" {embed.description.lower()}"
         for field in embed.fields:
             texto_completo += f" {field.name.lower()} {field.value.lower()}"
-    return texto_completo
 
-
-def enviar_whatsapp(texto_notificacao: str):
-    """Envia a notificação via CallMeBot e loga a resposta completa."""
-    phone = os.environ.get('WHATSAPP_PHONE')
-    apikey = os.environ.get('CALLMEBOT_KEY')
-
-    if not phone or not apikey:
-        print("❌ Não é possível enviar: WHATSAPP_PHONE ou CALLMEBOT_KEY não configurados.")
-        return
-
-    texto_codificado = urllib.parse.quote(texto_notificacao)
-    url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={texto_codificado}&apikey={apikey}"
-
-    try:
-        response = requests.get(url, timeout=15)
-        print(f"📨 CallMeBot status: {response.status_code}")
-        print(f"📨 CallMeBot resposta: {response.text}")
-
-        # A CallMeBot quase sempre responde 200, então checamos o texto também
-        if "Message queued" in response.text or "Message sent" in response.text:
-            print("✅ Mensagem confirmada como enviada para o WhatsApp!")
-        elif "APIKey" in response.text or "Invalid" in response.text:
-            print("❌ Falha: apikey inválida ou autorização expirada. Reenvie o 'I allow...' pro CallMeBot no WhatsApp.")
-        elif response.status_code != 200:
-            print(f"❌ Falha ao enviar. Status inesperado: {response.status_code}")
-        else:
-            print("⚠️ Resposta não reconhecida, verifique manualmente o texto acima.")
-    except Exception as e:
-        print(f"❌ Erro ao enviar: {e}")
-
-
-async def processar_mensagem(message: discord.Message):
-    if message.author == client.user:
-        return
-
-    nome_canal = message.channel.name
-    if nome_canal not in ALERTAS_POR_CANAL:
-        return
-
-    texto_completo = extrair_texto(message)
     if not texto_completo.strip():
         return
 
@@ -104,23 +63,22 @@ async def processar_mensagem(message: discord.Message):
 
     if palavras_encontradas:
         print(f"🔔 Encontrado {palavras_encontradas} no canal #{nome_canal}!")
-
+        
         titulo_alerta = message.embeds[0].title if message.embeds and message.embeds[0].title else "Alerta do Jogo"
-        texto_notificacao = f"🔔 *{titulo_alerta}*\nCanal: #{nome_canal}\nGatilho: {', '.join(palavras_encontradas)}"
-
-        enviar_whatsapp(texto_notificacao)
-
-
-@client.event
-async def on_message(message):
-    await processar_mensagem(message)
-
-
-@client.event
-async def on_message_edit(before, after):
-    # Muitos bots de tracker editam a mesma mensagem em vez de postar uma nova
-    await processar_mensagem(after)
-
+        texto_notificacao = f"🔔 **{titulo_alerta}**\n**Canal:** #{nome_canal}\n**Gatilho:** {', '.join(palavras_encontradas).title()}"
+        
+        try:
+            # Puxa o seu ID das variáveis de ambiente e converte para número inteiro
+            user_id = int(os.environ.get('DISCORD_USER_ID'))
+            
+            # Busca o seu usuário no Discord
+            user = await client.fetch_user(user_id)
+            
+            # Envia a mensagem direta
+            await user.send(texto_notificacao)
+            print("✅ DM enviada com sucesso!")
+        except Exception as e:
+            print(f"❌ Erro ao enviar DM: {e}")
 
 # --- 3. Inicialização ---
 async def main():
