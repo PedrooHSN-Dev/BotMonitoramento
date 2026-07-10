@@ -34,7 +34,7 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus fly trap", "mushroom", "strawberry", 
+    "dragon fruit", "venus fly trap", "mushroom", "Strawberry", 
     "rocket pop", "sunflower", "fire fern", "pomegranate", 
     "poison apple", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
@@ -55,7 +55,7 @@ async def on_ready():
     if not monitorar_site.is_running():
         monitorar_site.start()
 
-@tasks.loop(minutes=3)
+@tasks.loop(minutes=1)
 async def monitorar_site():
     print("-" * 40)
     print("🔄 Iniciando varredura de texto cru...")
