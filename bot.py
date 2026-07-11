@@ -26,6 +26,7 @@ client = discord.Client(intents=intents)
 # Cache baseado em marcadores de tempo (Timestamps) de atualização do próprio servidor
 cache_notificacoes = {
     "last_seed_restock": "",     
+    "last_gear_restock": "",     # <--- NOVO: Memória para o relógio da Gear Shop
     "last_sell_boundary": 0,     
     "weather": "limpo"
 }
@@ -34,13 +35,17 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus fly trap", "mushroom", 
+    "dragon fruit", "venus fly trap", "mushroom", "strawberry", 
     "rocket pop", "sunflower", "fire fern", "pomegranate", 
     "poison apple", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
 
+FILTRO_GEAR = [
+    "trowel"
+]
+
 FILTRO_MULTIPLICADORES = [
-    "bamboo", "dragon fruit", "venus fly trap", "mushroom", "rocket pop"
+    "bamboo", "dragon fruit", "venus fly trap", "mushroom"
 ]
 
 FILTRO_EVENTOS = [
@@ -88,30 +93,46 @@ async def monitorar_api():
                 
                 cache_notificacoes["last_sell_boundary"] = boundary
 
-        # --- 2. SEMENTES NO ESTOQUE (STOCK) ---
+        # --- 2. ESTOQUE: SEMENTES E GEAR (STOCK) ---
         req_stock = requests.get("https://api.gag2.gg/api/live/stock", headers=headers, timeout=10)
         if req_stock.status_code == 200:
             dados_stock = req_stock.json()
             
             for categoria in dados_stock.get("stock", []):
-                if categoria.get("category") == "seed":
-                    restocked_at = categoria.get("restockedAt", "")
-                    
+                tipo_categoria = categoria.get("category")
+                restocked_at = categoria.get("restockedAt", "")
+                
+                # --- CHECK DA SEED SHOP ---
+                if tipo_categoria == "seed":
                     if restocked_at != cache_notificacoes["last_seed_restock"]:
                         sementes_encontradas = []
                         for item in categoria.get("items", []):
-                            nome_semente = item.get("name", "")
-                            nome_limpo = nome_semente.lower().replace("'", "").replace("’", "")
+                            nome_item = item.get("name", "")
+                            nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
                             
                             if nome_limpo in FILTRO_SEMENTES:
-                                sementes_encontradas.append(nome_semente)
+                                sementes_encontradas.append(nome_item)
                         
                         if sementes_encontradas:
-                            # CORREÇÃO AQUI: Trocado {s} por {semente}
-                            alertas.append(f"🌱 **Estoque da Seed Shop Atualizado:**\n" + "\n".join([f"• {semente}" for semente in sementes_encontradas]))
+                            alertas.append(f"🌱 **Estoque da Seed Shop Atualizado:**\n" + "\n".join([f"• {s}" for s in sementes_encontradas]))
                         
                         cache_notificacoes["last_seed_restock"] = restocked_at
-                    break 
+                
+                # --- CHECK DA GEAR SHOP ---
+                elif tipo_categoria == "gear":
+                    if restocked_at != cache_notificacoes["last_gear_restock"]:
+                        gear_encontrados = []
+                        for item in categoria.get("items", []):
+                            nome_item = item.get("name", "")
+                            nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
+                            
+                            if nome_limpo in FILTRO_GEAR:
+                                gear_encontrados.append(nome_item)
+                        
+                        if gear_encontrados:
+                            alertas.append(f"🔧 **Estoque da Gear Shop Atualizado:**\n" + "\n".join([f"• {g}" for g in gear_encontrados]))
+                        
+                        cache_notificacoes["last_gear_restock"] = restocked_at
 
         # --- 3. CLIMA (WEATHER) ---
         req_weather = requests.get("https://api.gag2.gg/api/live/weather", headers=headers, timeout=10)
