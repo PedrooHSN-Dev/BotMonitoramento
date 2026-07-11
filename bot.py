@@ -23,10 +23,10 @@ async def run_web_server():
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-# Cache baseado em marcadores de tempo (Timestamps) de atualização do próprio servidor
+# Cache baseado em marcadores de tempo
 cache_notificacoes = {
     "last_seed_restock": "",     
-    "last_gear_restock": "",     # <--- NOVO: Memória para o relógio da Gear Shop
+    "last_gear_restock": "",     
     "last_sell_boundary": 0,     
     "weather": "limpo"
 }
@@ -35,13 +35,13 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus fly trap", "mushroom", 
+    "dragon fruit", "venus fly trap", "mushroom",
     "rocket pop", "sunflower", "fire fern", "pomegranate", 
     "poison apple", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
 
 FILTRO_GEAR = [
-    "trowel"
+    "sign"
 ]
 
 FILTRO_MULTIPLICADORES = [
@@ -68,7 +68,14 @@ async def monitorar_api():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json'
     }
-    alertas = []
+    
+    # Criando o "Card" (Embed) visual
+    embed = discord.Embed(
+        title="🚨 Radar GAG2 Atualizado",
+        description="Novos itens detectados nos seus filtros!",
+        color=0x2ecc71, # Cor verde esmeralda
+        timestamp=datetime.now(timezone.utc)
+    )
 
     try:
         # --- 1. MULTIPLICADORES (SELL) ---
@@ -88,8 +95,9 @@ async def monitorar_api():
                         mults_agora.append(f"{nome_fruta} ({int(multiplicador)}x)")
                 
                 if mults_agora:
-                    lista_formatada = "\n".join([f"📈 • **{m}**" for m in mults_agora])
-                    alertas.append(f"**Multiplicadores de Venda Atualizados:**\n{lista_formatada}")
+                    # Adiciona bloco formatado
+                    lista_formatada = "\n".join([f"> 📈 **{m}**" for m in mults_agora])
+                    embed.add_field(name="💰 Multiplicadores (Sell)", value=lista_formatada, inline=False)
                 
                 cache_notificacoes["last_sell_boundary"] = boundary
 
@@ -114,7 +122,9 @@ async def monitorar_api():
                                 sementes_encontradas.append(nome_item)
                         
                         if sementes_encontradas:
-                            alertas.append(f"🌱 **Estoque da Seed Shop Atualizado:**\n" + "\n".join([f"• {s}" for s in sementes_encontradas]))
+                            lista_formatada = "\n".join([f"> 🌱 {s}" for s in sementes_encontradas])
+                            # inline=True deixa lado a lado com o Gear se tiver espaço
+                            embed.add_field(name="🛒 Seed Shop", value=lista_formatada, inline=True)
                         
                         cache_notificacoes["last_seed_restock"] = restocked_at
                 
@@ -130,7 +140,8 @@ async def monitorar_api():
                                 gear_encontrados.append(nome_item)
                         
                         if gear_encontrados:
-                            alertas.append(f"🔧 **Estoque da Gear Shop Atualizado:**\n" + "\n".join([f"• {g}" for g in gear_encontrados]))
+                            lista_formatada = "\n".join([f"> 🔧 {g}" for g in gear_encontrados])
+                            embed.add_field(name="🎒 Gear Shop", value=lista_formatada, inline=True)
                         
                         cache_notificacoes["last_gear_restock"] = restocked_at
 
@@ -158,7 +169,7 @@ async def monitorar_api():
                 if evento_valido and any(alvo in nome_limpo for alvo in FILTRO_EVENTOS):
                     estado_clima = f"evento_{nome_limpo}"
                     if cache_notificacoes["weather"] != estado_clima:
-                        alertas.append(f"☁️ **Evento Climático Ativo:** {nome_evento}!")
+                        embed.add_field(name="☁️ Clima Ativo", value=f"> ✨ **{nome_evento}**", inline=False)
                         cache_notificacoes["weather"] = estado_clima
                 elif not evento_valido:
                     cache_notificacoes["weather"] = "limpo"
@@ -166,13 +177,17 @@ async def monitorar_api():
                 cache_notificacoes["weather"] = "limpo"
 
         # --- ENVIO DA MENSAGEM DIRETA (DM) ---
-        if alertas:
+        # Se o embed tiver recebido pelo menos 1 field (campo), significa que temos alertas!
+        if len(embed.fields) > 0:
             user_id = int(os.environ.get('DISCORD_USER_ID'))
             user = await client.fetch_user(user_id)
             
-            mensagem_final = "\n\n".join(alertas)
-            await user.send(f"🚨 **Atualização GAG2 Sincronizada** 🚨\n\n{mensagem_final}")
-            print("✅ DM enviada para o novo ciclo!")
+            # Adiciona rodapé bonitinho
+            embed.set_footer(text="Monitoramento Automático GAG2")
+            
+            # Envia o Embed!
+            await user.send(embed=embed)
+            print("✅ Embed enviado com sucesso!")
         else:
             print("⚪ Nenhuma alteração de ciclo ou item alvo detectado.")
 
