@@ -35,7 +35,7 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus fly trap", "mushroom", "strawberry",
+    "dragon fruit", "venus fly trap", "mushroom", "strawberry", 
     "rocket pop", "sunflower", "fire fern", "pomegranate", 
     "poison apple", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
@@ -95,7 +95,7 @@ async def monitorar_api():
                         mults_agora.append(f"{nome_fruta} ({int(multiplicador)}x)")
                 
                 if mults_agora:
-                    # Adiciona bloco formatado
+                    # Aqui mantemos o 📈 porque a API de Sell não envia emoji da fruta
                     lista_formatada = "\n".join([f"> 📈 **{m}**" for m in mults_agora])
                     embed.add_field(name="💰 Multiplicadores (Sell)", value=lista_formatada, inline=False)
                 
@@ -116,14 +116,14 @@ async def monitorar_api():
                         sementes_encontradas = []
                         for item in categoria.get("items", []):
                             nome_item = item.get("name", "")
+                            emoji_item = item.get("emoji", "🌱") # Pega o emoji nativo ou usa 🌱 de reserva
                             nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
                             
                             if nome_limpo in FILTRO_SEMENTES:
-                                sementes_encontradas.append(nome_item)
+                                sementes_encontradas.append(f"{emoji_item} **{nome_item}**")
                         
                         if sementes_encontradas:
-                            lista_formatada = "\n".join([f"> 🌱 {s}" for s in sementes_encontradas])
-                            # inline=True deixa lado a lado com o Gear se tiver espaço
+                            lista_formatada = "\n".join([f"> {s}" for s in sementes_encontradas])
                             embed.add_field(name="🛒 Seed Shop", value=lista_formatada, inline=True)
                         
                         cache_notificacoes["last_seed_restock"] = restocked_at
@@ -134,13 +134,14 @@ async def monitorar_api():
                         gear_encontrados = []
                         for item in categoria.get("items", []):
                             nome_item = item.get("name", "")
+                            emoji_item = item.get("emoji", "🔧") # Pega o emoji nativo ou usa 🔧 de reserva
                             nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
                             
                             if nome_limpo in FILTRO_GEAR:
-                                gear_encontrados.append(nome_item)
+                                gear_encontrados.append(f"{emoji_item} **{nome_item}**")
                         
                         if gear_encontrados:
-                            lista_formatada = "\n".join([f"> 🔧 {g}" for g in gear_encontrados])
+                            lista_formatada = "\n".join([f"> {g}" for g in gear_encontrados])
                             embed.add_field(name="🎒 Gear Shop", value=lista_formatada, inline=True)
                         
                         cache_notificacoes["last_gear_restock"] = restocked_at
@@ -153,6 +154,7 @@ async def monitorar_api():
             
             if clima_atual: 
                 nome_evento = clima_atual.get("name", "")
+                emoji_evento = clima_atual.get("emoji", "☁️") # Pega o emoji da lua/clima da API
                 nome_limpo = nome_evento.lower().replace("'", "").replace("’", "")
                 ends_at_str = clima_atual.get("endsAt")
                 
@@ -169,7 +171,7 @@ async def monitorar_api():
                 if evento_valido and any(alvo in nome_limpo for alvo in FILTRO_EVENTOS):
                     estado_clima = f"evento_{nome_limpo}"
                     if cache_notificacoes["weather"] != estado_clima:
-                        embed.add_field(name="☁️ Clima Ativo", value=f"> ✨ **{nome_evento}**", inline=False)
+                        embed.add_field(name="Clima Ativo", value=f"> {emoji_evento} **{nome_evento}**", inline=False)
                         cache_notificacoes["weather"] = estado_clima
                 elif not evento_valido:
                     cache_notificacoes["weather"] = "limpo"
@@ -177,15 +179,12 @@ async def monitorar_api():
                 cache_notificacoes["weather"] = "limpo"
 
         # --- ENVIO DA MENSAGEM DIRETA (DM) ---
-        # Se o embed tiver recebido pelo menos 1 field (campo), significa que temos alertas!
         if len(embed.fields) > 0:
             user_id = int(os.environ.get('DISCORD_USER_ID'))
             user = await client.fetch_user(user_id)
             
-            # Adiciona rodapé bonitinho
             embed.set_footer(text="Monitoramento Automático GAG2")
             
-            # Envia o Embed!
             await user.send(embed=embed)
             print("✅ Embed enviado com sucesso!")
         else:
