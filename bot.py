@@ -36,13 +36,13 @@ cache_notificacoes = {
 # SUAS LISTAS DE FILTROS (Sempre em minúsculo)
 # ==========================================
 FILTRO_SEMENTES = [
-    "dragon fruit", "venus fly trap", "mushroom", "strawberry", 
+    "dragon fruit", "venus fly trap", "mushroom", 
     "rocket pop", "sunflower", "fire fern", "pomegranate", 
     "poison apple", "venom spitter", "moon bloom", "hypno bloom", "dragons breath"
 ]
 
 FILTRO_GEAR = [
-    "jump mushroom"
+    "trowel"
 ]
 
 FILTRO_CRATES = [
