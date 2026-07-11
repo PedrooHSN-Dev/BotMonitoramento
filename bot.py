@@ -26,7 +26,8 @@ client = discord.Client(intents=intents)
 # Cache baseado em marcadores de tempo
 cache_notificacoes = {
     "last_seed_restock": "",     
-    "last_gear_restock": "",     
+    "last_gear_restock": "", 
+    "last_crate_restock": "",    
     "last_sell_boundary": 0,     
     "weather": "limpo"
 }
@@ -41,7 +42,10 @@ FILTRO_SEMENTES = [
 ]
 
 FILTRO_GEAR = [
-    "sign"
+    "jump mushroom"
+]
+
+FILTRO_CRATES = [
 ]
 
 FILTRO_MULTIPLICADORES = [
@@ -56,7 +60,7 @@ FILTRO_EVENTOS = [
 
 @client.event
 async def on_ready():
-    print(f'✅ Bot conectado como {client.user}! Monitoramento multi-clocks ativo...')
+    print(f'✅ Bot conectado como {client.user}! Monitoramento 100% ativo...')
     if not monitorar_api.is_running():
         monitorar_api.start()
 
@@ -69,11 +73,10 @@ async def monitorar_api():
         'Accept': 'application/json'
     }
     
-    # Criando o "Card" (Embed) visual
     embed = discord.Embed(
         title="🚨 Radar GAG2 Atualizado",
         description="Novos itens detectados nos seus filtros!",
-        color=0x2ecc71, # Cor verde esmeralda
+        color=0x2ecc71,
         timestamp=datetime.now(timezone.utc)
     )
 
@@ -95,13 +98,12 @@ async def monitorar_api():
                         mults_agora.append(f"{nome_fruta} ({int(multiplicador)}x)")
                 
                 if mults_agora:
-                    # Aqui mantemos o 📈 porque a API de Sell não envia emoji da fruta
                     lista_formatada = "\n".join([f"> 📈 **{m}**" for m in mults_agora])
                     embed.add_field(name="💰 Multiplicadores (Sell)", value=lista_formatada, inline=False)
                 
                 cache_notificacoes["last_sell_boundary"] = boundary
 
-        # --- 2. ESTOQUE: SEMENTES E GEAR (STOCK) ---
+        # --- 2. ESTOQUE: SEMENTES, GEAR E CRATES (STOCK) ---
         req_stock = requests.get("https://api.gag2.gg/api/live/stock", headers=headers, timeout=10)
         if req_stock.status_code == 200:
             dados_stock = req_stock.json()
@@ -116,10 +118,10 @@ async def monitorar_api():
                         sementes_encontradas = []
                         for item in categoria.get("items", []):
                             nome_item = item.get("name", "")
-                            emoji_item = item.get("emoji", "🌱") # Pega o emoji nativo ou usa 🌱 de reserva
+                            emoji_item = item.get("emoji", "🌱")
                             nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
                             
-                            if nome_limpo in FILTRO_SEMENTES:
+                            if any(alvo in nome_limpo for alvo in FILTRO_SEMENTES):
                                 sementes_encontradas.append(f"{emoji_item} **{nome_item}**")
                         
                         if sementes_encontradas:
@@ -134,10 +136,10 @@ async def monitorar_api():
                         gear_encontrados = []
                         for item in categoria.get("items", []):
                             nome_item = item.get("name", "")
-                            emoji_item = item.get("emoji", "🔧") # Pega o emoji nativo ou usa 🔧 de reserva
+                            emoji_item = item.get("emoji", "🔧")
                             nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
                             
-                            if nome_limpo in FILTRO_GEAR:
+                            if any(alvo in nome_limpo for alvo in FILTRO_GEAR):
                                 gear_encontrados.append(f"{emoji_item} **{nome_item}**")
                         
                         if gear_encontrados:
@@ -145,6 +147,24 @@ async def monitorar_api():
                             embed.add_field(name="🎒 Gear Shop", value=lista_formatada, inline=True)
                         
                         cache_notificacoes["last_gear_restock"] = restocked_at
+                        
+                # --- CHECK DAS CRATES (CAIXAS) ---
+                elif tipo_categoria == "crate":
+                    if restocked_at != cache_notificacoes["last_crate_restock"]:
+                        crates_encontradas = []
+                        for item in categoria.get("items", []):
+                            nome_item = item.get("name", "")
+                            emoji_item = item.get("emoji", "📦")
+                            nome_limpo = nome_item.lower().replace("'", "").replace("’", "")
+                            
+                            if any(alvo in nome_limpo for alvo in FILTRO_CRATES):
+                                crates_encontradas.append(f"{emoji_item} **{nome_item}**")
+                        
+                        if crates_encontradas:
+                            lista_formatada = "\n".join([f"> {c}" for c in crates_encontradas])
+                            embed.add_field(name="🎁 Crates", value=lista_formatada, inline=True)
+                        
+                        cache_notificacoes["last_crate_restock"] = restocked_at
 
         # --- 3. CLIMA (WEATHER) ---
         req_weather = requests.get("https://api.gag2.gg/api/live/weather", headers=headers, timeout=10)
@@ -154,7 +174,7 @@ async def monitorar_api():
             
             if clima_atual: 
                 nome_evento = clima_atual.get("name", "")
-                emoji_evento = clima_atual.get("emoji", "☁️") # Pega o emoji da lua/clima da API
+                emoji_evento = clima_atual.get("emoji", "☁️")
                 nome_limpo = nome_evento.lower().replace("'", "").replace("’", "")
                 ends_at_str = clima_atual.get("endsAt")
                 
